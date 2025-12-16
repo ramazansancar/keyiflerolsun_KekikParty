@@ -110,9 +110,15 @@ const safePlay = async (timeout = 3000) => {
 const buildProxyUrl = (url, headers = {}) => {
     const params = new URLSearchParams();
     params.append('url', url);
-    if (headers['User-Agent']) params.append('user_agent', headers['User-Agent']);
-    if (headers['Referer']) params.append('referer', headers['Referer']);
-    return `/api/v1/proxy?${params.toString()}`;
+    
+    // Headerları ayrıştır
+    const userAgent = headers['User-Agent'] || headers['user-agent'];
+    const referer = headers['Referer'] || headers['referer'];
+    
+    if (userAgent) params.append('user_agent', userAgent);
+    if (referer) params.append('referer', referer);
+    
+    return `/api/v1/proxy/video?${params.toString()}`;
 };
 
 // ============== Format Detection ==============
@@ -134,50 +140,114 @@ const loadHls = (url, headers = {}, useProxy = false) => {
             state.hls = null;
         }
 
-        state.hls = new Hls({
+        const hlsConfig = {
             debug: false,
             enableWorker: true,
-            xhrSetup: useProxy ? undefined : (xhr) => {
-                if (headers['User-Agent']) xhr.setRequestHeader('X-Custom-User-Agent', headers['User-Agent']);
-                if (headers['Referer']) xhr.setRequestHeader('X-Custom-Referer', headers['Referer']);
-            }
-        });
+            capLevelToPlayerSize: true,
+            maxLoadingDelay: 4,
+            minAutoBitrate: 0,
+            xhrSetup: (xhr, requestUrl) => {
+                // Eğer zaten proxy URL'i ise veya video endpoint'i ise dokunma
+                if (requestUrl.includes('/api/v1/proxy/video')) {
+                    return;
+                }
 
+                // URL Çözümleme ve Proxy Yönlendirme
+                try {
+                    let targetUrl = requestUrl;
+                    const originalVideoUrl = new URL(url);
+
+                    // 1. Göreceli URL Kontrolü
+                    if (!requestUrl.startsWith('http')) {
+                        if (requestUrl.startsWith('/')) {
+                            targetUrl = originalVideoUrl.origin + requestUrl;
+                        } else {
+                            const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+                            targetUrl = baseUrl + requestUrl;
+                        }
+                    }
+                    // 2. Absolute URL ama hostname aynı (sunucuya hatalı yönlenmiş)
+                    else if (requestUrl.includes(window.location.hostname)) {
+                        const urlObj = new URL(requestUrl);
+                        // Eğer dosya adı orijinal URL path'inde varsa veya .ts/.key gibi uzantılarsa
+                         const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+                         const filename = urlObj.pathname.split('/').pop();
+                         targetUrl = baseUrl + filename + urlObj.search;
+                    }
+
+                    // Proxy URL oluştur - Headers closure'dan geliyor
+                    logger.video(`HLS Segment: ${targetUrl}`);
+                    const proxyUrl = buildProxyUrl(targetUrl, headers);
+                    xhr.open('GET', proxyUrl, true);
+                    
+                } catch (e) {
+                    console.error('HLS Proxy Error:', e);
+                    // Hata durumunda proxy ile sarmala ve devam et
+                    xhr.open('GET', buildProxyUrl(requestUrl, headers), true);
+                }
+            }
+        };
+
+        state.hls = new Hls(hlsConfig);
+        
+        // İlk yükleme URL'i
+        // useProxy=true ise bile manifest'i direkt proxy'den isteyebiliriz, 
+        // ancak xhrSetup zaten her şeyi proxy'den geçirecek şekilde ayarlandı.
+        // Yine de initial manifest yüklemesi için safe start:
         const loadUrl = useProxy ? buildProxyUrl(url, headers) : url;
-        logger.video(`HLS: ${useProxy ? 'proxy' : 'direct'}`);
+        
+        logger.video(`HLS: ${useProxy ? 'proxy (forced)' : 'smart-proxy'}`);
         
         state.hls.loadSource(loadUrl);
         state.hls.attachMedia(videoPlayer);
 
         let resolved = false;
-        const timeout = useProxy ? null : setTimeout(() => {
-            if (!resolved) {
-                resolved = true;
-                state.hls?.destroy();
-                loadHls(url, headers, true).then(resolve);
-            }
-        }, 8000);
+        let retryCount = 0;
+        const maxRetries = 3;
 
         state.hls.on(Hls.Events.MANIFEST_PARSED, () => {
             if (!resolved) {
                 resolved = true;
-                clearTimeout(timeout);
                 logger.success('HLS OK');
                 resolve(true);
             }
         });
 
         state.hls.on(Hls.Events.ERROR, async (_, data) => {
-            if (data.fatal && !resolved) {
-                clearTimeout(timeout);
-                if (!useProxy && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                    resolved = true;
-                    const result = await loadHls(url, headers, true);
-                    resolve(result);
-                } else {
-                    resolved = true;
-                    showToast('Video hatası: ' + data.details, 'error');
-                    resolve(false);
+            if (data.fatal) {
+                switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        retryCount++;
+                        logger.video(`HLS Network Error (Retry ${retryCount}/${maxRetries})`);
+                        
+                        if (retryCount <= maxRetries) {
+                            state.hls.startLoad();
+                        } else if (!useProxy && !resolved) {
+                             // İlk deneme başarısızsa ve henüz proxy zorlanmadıysa
+                             logger.video('Switching to forced proxy mode...');
+                             resolved = true; // Mevcut promise resolve olmasın diye flag'i kitle
+                             state.hls.destroy();
+                             const result = await loadHls(url, headers, true); // Recursive call with forced proxy
+                             resolve(result); // Resolve original promise with result
+                        } else {
+                            if (!resolved) {
+                                resolved = true;
+                                showToast(`HLS Hatası: ${data.details}`, 'error');
+                                resolve(false);
+                            }
+                        }
+                        break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        logger.video('HLS Media Error - Recovering...');
+                        state.hls.recoverMediaError();
+                        break;
+                    default:
+                        if (!resolved) {
+                            resolved = true;
+                            state.hls.destroy();
+                            resolve(false);
+                        }
+                        break;
                 }
             }
         });
@@ -240,8 +310,23 @@ export const loadVideo = async (url, format = 'hls', headers = {}, title = '', s
     playerOverlay.classList.add('hidden');
     hideSkeleton('player-container');
 
-    const detectedFormat = detectFormat(url, format);
-    logger.video(`Loading: ${detectedFormat}`);
+    // Content-Type Pre-check (via Proxy HEAD)
+    let detectedFormat = format;
+    try {
+        const proxyUrl = buildProxyUrl(url, headers);
+        const headRes = await fetch(proxyUrl, { method: 'HEAD' });
+        const contentType = headRes.headers.get('content-type') || '';
+        
+        if (contentType.includes('mpegurl') || contentType.includes('mpeg')) {
+            detectedFormat = 'hls';
+        } else if (contentType.includes('mp4')) {
+            detectedFormat = 'mp4';
+        }
+        logger.video(`Format check: ${contentType} -> ${detectedFormat}`);
+    } catch (e) {
+        logger.video('Format check failed, falling back to extension detection');
+        detectedFormat = detectFormat(url, format);
+    }
 
     let success = false;
     if (detectedFormat === 'hls' && typeof Hls !== 'undefined' && Hls.isSupported()) {
@@ -256,7 +341,15 @@ export const loadVideo = async (url, format = 'hls', headers = {}, title = '', s
         track.kind = 'subtitles';
         track.label = 'Türkçe';
         track.srclang = 'tr';
-        track.src = buildProxyUrl(subtitleUrl, headers);
+        // Subtitle proxy de güncel parametre yapısını kullanmalı (buildProxyUrl zaten güncellendi ama subtitle endpoint için manuel yapmamız gerekebilir veya buildProxyUrl'i subtitle için de kullanabiliriz ama endpoint farklı)
+        // Subtitle için ayrı endpoint var: /api/v1/proxy/subtitle
+        // buildProxyUrl'i subtitle için modifiye etmediysek manuel kuralım:
+        const params = new URLSearchParams();
+        params.append('url', subtitleUrl);
+        if (headers['User-Agent']) params.append('user_agent', headers['User-Agent']);
+        if (headers['Referer']) params.append('referer', headers['Referer']);
+        track.src = `/api/v1/proxy/subtitle?${params.toString()}`;
+        
         track.default = true;
         videoPlayer.appendChild(track);
     }

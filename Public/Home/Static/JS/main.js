@@ -53,10 +53,26 @@ const handleRoomState = async (roomState) => {
         const shouldLoad = getLastLoadedUrl() !== roomState.video_url;
 
         if (shouldLoad) {
+            // Headerları normalize et
+            const headers = roomState.headers || {};
+            if (roomState.user_agent) headers['User-Agent'] = roomState.user_agent;
+            if (roomState.referer) headers['Referer'] = roomState.referer;
+            
+            // UI Inputlarını Güncelle
+            const urlInput = document.getElementById('video-url-input');
+            const uaInput = document.getElementById('custom-user-agent');
+            const refInput = document.getElementById('custom-referer');
+            const subInput = document.getElementById('subtitle-url');
+
+            if (urlInput) urlInput.value = roomState.video_url || '';
+            if (uaInput) uaInput.value = roomState.user_agent || '';
+            if (refInput) refInput.value = roomState.referer || '';
+            if (subInput) subInput.value = roomState.subtitle_url || '';
+
             await loadVideo(
                 roomState.video_url, 
                 roomState.video_format, 
-                roomState.headers, 
+                headers, 
                 roomState.video_title, 
                 roomState.subtitle_url
             );
@@ -87,7 +103,24 @@ const handleChatMessage = (msg) => {
 
 const handleVideoChanged = async (msg) => {
     showSkeleton('player-container');
-    await loadVideo(msg.url, msg.format, msg.headers, msg.title, msg.subtitle_url);
+    
+    // Headerları normalize et
+    const headers = msg.headers || {};
+    if (msg.user_agent) headers['User-Agent'] = msg.user_agent;
+    if (msg.referer) headers['Referer'] = msg.referer;
+    
+    // UI Inputlarını Güncelle (Stream)
+    const urlInput = document.getElementById('video-url-input');
+    const uaInput = document.getElementById('custom-user-agent');
+    const refInput = document.getElementById('custom-referer');
+    const subInput = document.getElementById('subtitle-url');
+
+    if (urlInput) urlInput.value = msg.url || '';
+    if (uaInput) uaInput.value = msg.user_agent || '';
+    if (refInput) refInput.value = msg.referer || '';
+    if (subInput) subInput.value = msg.subtitle_url || '';
+
+    await loadVideo(msg.url, msg.format, headers, msg.title, msg.subtitle_url);
     updateVideoInfo(msg.title, msg.duration);
     showToast(`${msg.changed_by || 'Birisi'} yeni video yükledi`, 'info');
     addSystemMessage(`🎥 Yeni video: ${msg.title || 'Video'}`);
@@ -133,7 +166,6 @@ const setupGlobalActions = () => {
 
         showSkeleton('player-container');
         send('video_change', { url, user_agent: userAgent, referer, subtitle_url: subtitleUrl });
-        if (urlInput) urlInput.value = '';
     };
 
     // Send chat message
