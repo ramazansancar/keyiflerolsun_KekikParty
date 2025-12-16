@@ -925,3 +925,26 @@ body {
         max-width: none;
     }
 }
+
+/* Mobile Video Playing Mode - Hide UI for better chat experience */
+@media (max-width: 1024px) {
+    body.video-playing .wp-header {
+        display: none !important;
+    }
+
+    body.video-playing .controls-toggle {
+        display: none !important;
+    }
+
+    body.video-playing .wp-video-info {
+        display: none !important;
+    }
+
+    body.video-playing .wp-player-wrapper {
+        max-height: 30dvh;
+    }
+
+    body.video-playing .wp-chat-section {
+        flex: 1;
+    }
+}

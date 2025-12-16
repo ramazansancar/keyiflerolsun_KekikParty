@@ -55,6 +55,9 @@ export const setupVideoEventListeners = () => {
     if (!videoPlayer) return;
 
     videoPlayer.addEventListener('play', () => {
+        // Add video-playing class for mobile UX
+        document.body.classList.add('video-playing');
+        
         // Only broadcast user-initiated play when in READY state and not syncing
         if (state.isSyncing) return;
         if (state.playerState !== PlayerState.READY) return;
@@ -63,6 +66,9 @@ export const setupVideoEventListeners = () => {
     });
 
     videoPlayer.addEventListener('pause', () => {
+        // Remove video-playing class
+        document.body.classList.remove('video-playing');
+        
         // Only broadcast user-initiated pause when PLAYING and not syncing
         if (state.isSyncing) return;
         if (state.playerState !== PlayerState.PLAYING) return;
@@ -490,17 +496,25 @@ export const handleSync = async (msg) => {
     }
 
     // Sync play/pause state
-    if (msg.is_playing && videoPlayer.paused) {
-        const result = await safePlay();
-        if (result.success) {
+    if (msg.is_playing) {
+        if (videoPlayer.paused) {
+            const result = await safePlay();
+            if (result.success) {
+                state.playerState = PlayerState.PLAYING;
+            } else if (result.error?.name === 'NotAllowedError') {
+                state.isSyncing = false;
+                showInteractionPrompt();
+                return;
+            }
+        } else {
+            // Already playing, ensure state is consistent
             state.playerState = PlayerState.PLAYING;
-        } else if (result.error?.name === 'NotAllowedError') {
-            state.isSyncing = false;
-            showInteractionPrompt();
-            return;
         }
-    } else if (!msg.is_playing && !videoPlayer.paused) {
-        videoPlayer.pause();
+    } else {
+        if (!videoPlayer.paused) {
+            videoPlayer.pause();
+        }
+        // Always update state when paused
         state.playerState = PlayerState.READY;
     }
 
@@ -513,6 +527,10 @@ export const handleSeek = async (msg) => {
     const { videoPlayer } = state;
     if (!videoPlayer) return;
     if (state.playerState === PlayerState.LOADING) return;
+    if (state.playerState === PlayerState.WAITING_INTERACTION) {
+        videoPlayer.currentTime = msg.current_time;
+        return;
+    }
 
     state.isSyncing = true;
     videoPlayer.currentTime = msg.current_time;
@@ -522,6 +540,19 @@ export const handleSeek = async (msg) => {
         videoPlayer.addEventListener('seeked', resolve, { once: true });
         setTimeout(resolve, 300); // Fallback timeout
     });
+
+    // Sync play/pause state if provided
+    if (msg.is_playing !== undefined) {
+        if (msg.is_playing && videoPlayer.paused) {
+            const result = await safePlay();
+            if (result.success) {
+                state.playerState = PlayerState.PLAYING;
+            }
+        } else if (!msg.is_playing && !videoPlayer.paused) {
+            videoPlayer.pause();
+            state.playerState = PlayerState.READY;
+        }
+    }
     
     state.isSyncing = false;
     updateSyncInfoText(msg.triggered_by, `${formatTime(msg.current_time)} konumuna atladı`);

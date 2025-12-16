@@ -76,11 +76,12 @@ class MessageHandler:
         if room:
             await watch_party_manager.update_playback_state(self.room_id, room.is_playing, current_time)
 
-        await watch_party_manager.broadcast_to_room(self.room_id, {
-            "type"         : "seek",
-            "current_time" : current_time,
-            "triggered_by" : self.user.username
-        }, exclude_user_id=self.user.user_id)
+            await watch_party_manager.broadcast_to_room(self.room_id, {
+                "type"         : "seek",
+                "current_time" : current_time,
+                "is_playing"   : room.is_playing,
+                "triggered_by" : self.user.username
+            }, exclude_user_id=self.user.user_id)
 
     async def handle_chat(self, message: dict):
         """CHAT mesajını işle"""
