@@ -104,10 +104,11 @@ class MessageHandler:
 
     async def handle_video_change(self, message: dict):
         """VIDEO_CHANGE mesajını işle"""
-        url          = message.get("url", "").strip()
-        user_agent   = message.get("user_agent", "")
-        referer      = message.get("referer", "")
-        subtitle_url = message.get("subtitle_url", "").strip()
+        url           = message.get("url", "").strip()
+        custom_title  = message.get("title", "").strip()  # Client'tan gelen title
+        user_agent    = message.get("user_agent", "")
+        referer       = message.get("referer", "")
+        subtitle_url  = message.get("subtitle_url", "").strip()
 
         if not url:
             await self.send_error("Video URL'si gerekli")
@@ -125,10 +126,13 @@ class MessageHandler:
             if video_info.get("http_headers"):
                 headers.update(video_info.get("http_headers"))
 
+            # Client'tan title geldiyse onu kullan, yoksa video_info'dan al
+            title = custom_title or video_info.get("title", "Video")
+
             await watch_party_manager.update_video(
                 self.room_id,
                 url          = video_info["stream_url"],
-                title        = video_info.get("title", "Video"),
+                title        = title,
                 video_format = video_info.get("format", "mp4"),
                 headers      = headers,
                 subtitle_url = subtitle_url
@@ -137,7 +141,7 @@ class MessageHandler:
             await watch_party_manager.broadcast_to_room(self.room_id, {
                 "type"         : "video_changed",
                 "url"          : video_info["stream_url"],
-                "title"        : video_info.get("title", "Video"),
+                "title"        : title,
                 "format"       : video_info.get("format", "mp4"),
                 "thumbnail"    : video_info.get("thumbnail"),
                 "duration"     : video_info.get("duration", 0),
@@ -147,11 +151,12 @@ class MessageHandler:
             })
         else:
             video_format = "hls" if ".m3u8" in url.lower() else "mp4"
+            title = custom_title or "Video"
 
             await watch_party_manager.update_video(
                 self.room_id,
                 url          = url,
-                title        = message.get("title", "Video"),
+                title        = title,
                 video_format = video_format,
                 headers      = headers,
                 subtitle_url = subtitle_url
@@ -160,7 +165,7 @@ class MessageHandler:
             await watch_party_manager.broadcast_to_room(self.room_id, {
                 "type"         : "video_changed",
                 "url"          : url,
-                "title"        : message.get("title", "Video"),
+                "title"        : title,
                 "format"       : video_format,
                 "headers"      : headers,
                 "subtitle_url" : subtitle_url,
