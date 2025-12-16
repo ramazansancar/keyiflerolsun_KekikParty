@@ -55,8 +55,11 @@ const handleRoomState = async (roomState) => {
         if (shouldLoad) {
             // Headerları normalize et
             const headers = roomState.headers || {};
-            if (roomState.user_agent) headers['User-Agent'] = roomState.user_agent;
-            if (roomState.referer) headers['Referer'] = roomState.referer;
+            const userAgent = roomState.user_agent || headers['User-Agent'] || headers['user-agent'] || '';
+            const referer = roomState.referer || headers['Referer'] || headers['referer'] || '';
+            
+            if (userAgent) headers['User-Agent'] = userAgent;
+            if (referer) headers['Referer'] = referer;
             
             // UI Inputlarını Güncelle
             const urlInput = document.getElementById('video-url-input');
@@ -65,8 +68,8 @@ const handleRoomState = async (roomState) => {
             const subInput = document.getElementById('subtitle-url');
 
             if (urlInput) urlInput.value = roomState.video_url || '';
-            if (uaInput) uaInput.value = roomState.user_agent || '';
-            if (refInput) refInput.value = roomState.referer || '';
+            if (uaInput) uaInput.value = userAgent;
+            if (refInput) refInput.value = referer;
             if (subInput) subInput.value = roomState.subtitle_url || '';
 
             await loadVideo(
@@ -106,8 +109,11 @@ const handleVideoChanged = async (msg) => {
     
     // Headerları normalize et
     const headers = msg.headers || {};
-    if (msg.user_agent) headers['User-Agent'] = msg.user_agent;
-    if (msg.referer) headers['Referer'] = msg.referer;
+    const userAgent = msg.user_agent || headers['User-Agent'] || headers['user-agent'] || '';
+    const referer = msg.referer || headers['Referer'] || headers['referer'] || '';
+    
+    if (userAgent) headers['User-Agent'] = userAgent;
+    if (referer) headers['Referer'] = referer;
     
     // UI Inputlarını Güncelle (Stream)
     const urlInput = document.getElementById('video-url-input');
@@ -116,8 +122,8 @@ const handleVideoChanged = async (msg) => {
     const subInput = document.getElementById('subtitle-url');
 
     if (urlInput) urlInput.value = msg.url || '';
-    if (uaInput) uaInput.value = msg.user_agent || '';
-    if (refInput) refInput.value = msg.referer || '';
+    if (uaInput) uaInput.value = userAgent;
+    if (refInput) refInput.value = referer;
     if (subInput) subInput.value = msg.subtitle_url || '';
 
     await loadVideo(msg.url, msg.format, headers, msg.title, msg.subtitle_url);
