@@ -2,7 +2,7 @@
 
 from fastapi            import WebSocket
 from .WatchPartyManager import watch_party_manager
-from Public.API.v1.Libs import YTDLPService
+from .ytdlp_service     import ytdlp_extract_video_info
 import json
 
 class MessageHandler:
@@ -118,7 +118,7 @@ class MessageHandler:
         if referer:
             headers["Referer"] = referer
 
-        video_info = await YTDLPService.extract_video_info(url)
+        video_info = await ytdlp_extract_video_info(url)
 
         if video_info and video_info.get("stream_url"):
             if video_info.get("http_headers"):

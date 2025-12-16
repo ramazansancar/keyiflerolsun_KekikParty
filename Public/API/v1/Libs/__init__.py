@@ -1,7 +1,6 @@
 # Bu araç @keyiflerolsun tarafından | @KekikAkademi için yazılmıştır.
 
-from .ytdlp_service import YTDLPService
-from .helpers       import (
+from .helpers import (
     CORS_HEADERS,
     prepare_request_headers,
     prepare_response_headers,
