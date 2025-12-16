@@ -343,17 +343,12 @@ export const loadVideo = async (url, format = 'hls', headers = {}, title = '', s
         track.kind = 'subtitles';
         track.label = 'Türkçe';
         track.srclang = 'tr';
-        track.label = 'Türkçe';
-        track.srclang = 'tr';
         // Subtitle (Smart)
         if (window.PROXY_ENABLED !== false) {
              track.src = buildProxyUrl(subtitleUrl, headers, 'subtitle');
         } else {
              track.src = subtitleUrl;
         }
-        
-        track.default = true;
-        
         track.default = true;
         videoPlayer.appendChild(track);
     }
