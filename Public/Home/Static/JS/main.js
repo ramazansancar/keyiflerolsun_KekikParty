@@ -209,23 +209,24 @@ const setupGlobalActions = () => {
             return;
         }
 
-        const { roomId } = getRoomConfig();
+        // Generate new random room ID
+        const newRoomId = crypto.randomUUID().slice(0, 8).toUpperCase();
         const userAgent = document.getElementById('custom-user-agent')?.value.trim() || '';
         const referer = document.getElementById('custom-referer')?.value.trim() || '';
         const subtitle = document.getElementById('subtitle-url')?.value.trim() || '';
 
-        // Build shareable URL with current room ID
+        // Build shareable URL with new room ID
         const params = new URLSearchParams();
         params.append('url', url);
         if (userAgent) params.append('user_agent', userAgent);
         if (referer) params.append('referer', referer);
         if (subtitle) params.append('subtitle', subtitle);
 
-        const shareUrl = `${window.location.origin}/watch-party/${roomId}?${params.toString()}`;
+        const shareUrl = `${window.location.origin}/watch-party/${newRoomId}?${params.toString()}`;
 
         try {
             await navigator.clipboard.writeText(shareUrl);
-            showToast('Oda linki kopyalandı!', 'success');
+            showToast('Yeni oda linki kopyalandı!', 'success');
         } catch {
             // Fallback: show in prompt
             prompt('Oda linki:', shareUrl);
