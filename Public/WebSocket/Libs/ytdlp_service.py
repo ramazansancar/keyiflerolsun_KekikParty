@@ -25,7 +25,8 @@ async def ytdlp_extract_video_info(url: str):
             "--no-warnings",
             "--no-playlist",
             "-j",  # JSON output
-            "-f", "best[ext=mp4]/best",  # En iyi mp4 veya fallback
+            "-f", "best",
+            "--format-sort", "proto:https",  # HTTPS (progressive) öncelikli, HLS yerine
             url
         ]
 
