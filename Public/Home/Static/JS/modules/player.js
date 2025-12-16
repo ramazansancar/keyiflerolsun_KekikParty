@@ -107,7 +107,7 @@ const safePlay = async (timeout = 3000) => {
 };
 
 // ============== Proxy URL Builder ==============
-const buildProxyUrl = (url, headers = {}) => {
+const buildProxyUrl = (url, headers = {}, endpoint = 'video') => {
     const params = new URLSearchParams();
     params.append('url', url);
     
@@ -118,7 +118,7 @@ const buildProxyUrl = (url, headers = {}) => {
     if (userAgent) params.append('user_agent', userAgent);
     if (referer) params.append('referer', referer);
     
-    return `/api/v1/proxy/video?${params.toString()}`;
+    return `/api/v1/proxy/${endpoint}?${params.toString()}`;
 };
 
 // ============== Format Detection ==============
@@ -341,14 +341,12 @@ export const loadVideo = async (url, format = 'hls', headers = {}, title = '', s
         track.kind = 'subtitles';
         track.label = 'Türkçe';
         track.srclang = 'tr';
-        // Subtitle proxy de güncel parametre yapısını kullanmalı (buildProxyUrl zaten güncellendi ama subtitle endpoint için manuel yapmamız gerekebilir veya buildProxyUrl'i subtitle için de kullanabiliriz ama endpoint farklı)
-        // Subtitle için ayrı endpoint var: /api/v1/proxy/subtitle
-        // buildProxyUrl'i subtitle için modifiye etmediysek manuel kuralım:
-        const params = new URLSearchParams();
-        params.append('url', subtitleUrl);
-        if (headers['User-Agent']) params.append('user_agent', headers['User-Agent']);
-        if (headers['Referer']) params.append('referer', headers['Referer']);
-        track.src = `/api/v1/proxy/subtitle?${params.toString()}`;
+        track.label = 'Türkçe';
+        track.srclang = 'tr';
+        // Subtitle Proxy
+        track.src = buildProxyUrl(subtitleUrl, headers, 'subtitle');
+        
+        track.default = true;
         
         track.default = true;
         videoPlayer.appendChild(track);
